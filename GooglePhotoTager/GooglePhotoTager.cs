@@ -1,6 +1,14 @@
-﻿using Serilog;
+﻿using ExifLibrary;
+using Serilog;
+using System;
+using System.Drawing;
+using System.Drawing.Imaging;
+using System.IO;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using static System.Net.Mime.MediaTypeNames;
+using Image = System.Drawing.Image;
 
 namespace MediaFixer;
 
@@ -8,33 +16,72 @@ namespace MediaFixer;
 /// This program is intended to tag my downloaded files from GooglePhotos Takeout.
 /// For some reason google takeout does not store the tags in the file, but I want to keep the info.
 /// </summary>
-internal partial class MediaFixer
+internal class GooglePhotoTager
 {
     private readonly IReadOnlyCollection<string> _imageExtensions = new[] { ".jpg", ".png" };
-
-    private readonly Dictionary<string, string?> _options;
-
+    private readonly GooglePhotoTagOptions _options;
     private readonly List<string> _unusedProperties = new List<string>();
-
     private readonly IReadOnlyCollection<string> _videoExtensions = new[] { ".mp4" };
 
-    private MediaFixer(Dictionary<string, string?> options)
+    private GooglePhotoTager(Dictionary<string, string?> arguments)
     {
-        _options = options;
+        _options = CreateOptions(arguments);
         Log.Logger = new LoggerConfiguration()
             .WriteTo.ColoredConsole()
             .CreateLogger();
     }
 
-    internal static async Task FixMedia(Dictionary<string, string?> options)
+    internal static async Task FixMedia(Dictionary<string, string?> arguments)
     {
-        if (options == null) throw new ArgumentNullException(nameof(options));
-        var fixer = new MediaFixer(options);
+        if (arguments == null) throw new ArgumentNullException(nameof(arguments));
+       
+        var fixer = new GooglePhotoTager(arguments);
         await fixer.Start();
-    }
-    private string GetConfigValue(string key)
+    } 
+
+    private async Task Start()
     {
-        if (!_options.TryGetValue(key.ToLower(), out var configValue) && configValue != null)
+        Log.Information("======================= Starting tagging =======================");
+        var files = GetFilesInDirectory(_options.Source);
+
+        var count = 0;
+        var limit = 3;
+
+        foreach (var f in files.media)
+        {
+            //if (count >= limit)
+            //{
+            //    break;
+            //}
+            await ProcessFile(f, files.all, _options.ScanMetaOnly);
+            count++;
+        }
+
+        if (_options.ScanMetaOnly)
+        {
+            foreach (var prop in _unusedProperties)
+            {                
+                Log.Error($"Property {prop} is not being used");                
+            }
+        }
+
+        Log.Information("======================= Tagging completed =======================");
+    }
+
+    private GooglePhotoTagOptions CreateOptions(Dictionary<string, string?> arguments)
+    {      
+        return new GooglePhotoTagOptions()
+        {
+            Source = GetConfigValue("source", arguments),
+            Destination = GetConfigValue("destination", arguments),
+            ScanMetaOnly = HasConfigValue("scanMeta", arguments),
+            OverWriteDestination = HasConfigValue("overWriteDestination", arguments)
+        };
+    }
+
+    private string GetConfigValue(string key, Dictionary<string, string?> arguments)
+    {
+        if (!arguments.TryGetValue(key.ToLower(), out var configValue) && configValue != null)
         {
             throw new InvalidOperationException($"Could not find config value for {key}");
         }
@@ -144,6 +191,11 @@ internal partial class MediaFixer
                 }
             }
         }
+
+        if (parsedMeta.GeoDataExif.Longitude > 0)
+        {
+            Log.Information($"{metaFile.FullName} has GPS data!");
+        }
     }
 
     private Task<GoogleMeta> GetMetaData(string file)
@@ -173,9 +225,9 @@ internal partial class MediaFixer
         return json.GetType().GetProperty(key).GetValue(json, null).ToString();
     }
 
-    private bool HasConfigValue(string key)
+    private bool HasConfigValue(string key, Dictionary<string, string?> arguments)
     {
-        return _options.ContainsKey(key.ToLower());
+        return arguments.ContainsKey(key.ToLower());
     }
 
     /// <summary>
@@ -198,40 +250,57 @@ internal partial class MediaFixer
             : GetMetaAndProcessImage(file, metaFile);
     }
 
-    private void ProcessImage(FileInfo file, dynamic meta)
+    private DateTime GetPropertyDateTaken(GoogleMeta meta, string file)
     {
-        var tfile = TagLib.File.Create(file.FullName);
-        var tag = tfile.Tag as TagLib.Image.CombinedImageTag;
+        var epoch = new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc);
 
-        //if (tag.DateTime
-
-        //string title = tfile.Tag.Title;
-        //var tag = tfile.Tag as TagLib.Image.CombinedImageTag;
-        //DateTime? snapshot = tag.DateTime;
-        //Console.WriteLine("Title: {0}, snapshot taken on {1}", title, snapshot);
-
-        //// change title in the file
-        //tfile.Tag.Title = "my new title";
-        //tfile.Save();
-    }
-
-    private async Task Start()
-    {
-        var source = GetConfigValue("source");
-        var files = GetFilesInDirectory(source);
-        var scanMetaOnly = HasConfigValue("scanMeta");
-
-        foreach (var f in files.media)
+        if (meta.PhotoTakenTime.Timestamp != null)
         {
-            await ProcessFile(f, files.all, scanMetaOnly);
+            var unixtime = Convert.ToInt64(meta.PhotoTakenTime.Timestamp);
+            return epoch.AddSeconds(unixtime);
         }
 
-        if (scanMetaOnly)
+        if (meta.CreationTime.Timestamp != null)
         {
-            foreach (var prop in _unusedProperties)
+            var unixtime = Convert.ToInt64(meta.CreationTime.Timestamp);
+
+            return epoch.AddSeconds(unixtime);
+        }
+
+        Log.Error($"Could not determine date taken for {file}");
+        return epoch;
+    }
+
+#pragma warning disable CA1416 // Validate platform compatibility
+    /// <summary>
+    /// 1. Check destination of already exists
+    /// 2. Create a copy (we will edit the copy)
+    /// 3. Edit tags
+    /// </summary>
+    private void ProcessImage(FileInfo sourceFile, GoogleMeta meta)
+    {
+        var destinationFilePath = Path.Join(_options.Destination, sourceFile.Name);
+
+        if (File.Exists(destinationFilePath))
+        {
+            if (!_options.OverWriteDestination)
             {
-                Log.Error($"Property {prop} is not being used");
+                Log.Warning($"{destinationFilePath} already exists, ignoreing");
+                return;
             }
         }
+
+        // Set the DateTaken using ExifLib
+        var img = ImageFile.FromFile(sourceFile.FullName);
+        img.Properties.Set(ExifTag.DateTimeDigitized, GetPropertyDateTaken(meta, sourceFile.FullName));
+        img.Properties.Set(ExifTag.GPSDestLongitude, meta.GeoDataExif.Longitude);
+        img.Properties.Set(ExifTag.GPSDestLatitude, meta.GeoDataExif.Latitude);
+        img.Save(destinationFilePath);
+
+
     }
+#pragma warning restore CA1416 // Validate platform compatibility
+
+
+
 }

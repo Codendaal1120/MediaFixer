@@ -4,9 +4,7 @@ internal static class App
 {
     private static async Task Main(string[] args)
     {
-        Console.WriteLine("Starting Media fix");
-        await MediaFixer.FixMedia(ParseArguments(args));
-        Console.WriteLine("Media fix completed");
+        await GooglePhotoTager.FixMedia(ParseArguments(args));
         Console.ReadLine();
     }
 
