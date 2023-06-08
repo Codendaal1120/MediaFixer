@@ -15,6 +15,12 @@ internal class GooglePhotoTagOptions
     public string Destination { get; init; } = null!;
 
     /// <summary>
+    /// set with -archive <PATH>
+    /// The destination to move finished files to
+    /// </summary>
+    public string ArchiveDirectory { get; init; } = null!;
+
+    /// <summary>
     /// set with -scanMeta 
     /// Enable this to check 
     /// </summary>

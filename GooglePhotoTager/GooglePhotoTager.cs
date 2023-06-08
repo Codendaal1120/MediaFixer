@@ -45,14 +45,15 @@ internal class GooglePhotoTager
         var files = GetFilesInDirectory(_options.Source);
 
         var count = 0;
-        var limit = 3;
+        var limit = 1000;
 
         foreach (var f in files.media)
         {
-            //if (count >= limit)
-            //{
-            //    break;
-            //}
+            if (count >= limit)
+            {
+                Log.Error($"Limit of {limit} files reached");
+                break;
+            }
             await ProcessFile(f, files.all, _options.ScanMetaOnly);
             count++;
         }
@@ -75,7 +76,8 @@ internal class GooglePhotoTager
             Source = GetConfigValue("source", arguments),
             Destination = GetConfigValue("destination", arguments),
             ScanMetaOnly = HasConfigValue("scanMeta", arguments),
-            OverWriteDestination = HasConfigValue("overWriteDestination", arguments)
+            OverWriteDestination = HasConfigValue("overWriteDestination", arguments),
+            ArchiveDirectory = GetConfigValue("archive", arguments)
         };
     }
 
@@ -161,7 +163,7 @@ internal class GooglePhotoTager
 
         if (_videoExtensions.Contains(file.Extension))
         {
-            ProcessImage(file, meta);
+            ProcessVideo(file, meta);
         }
     }
 
@@ -198,9 +200,11 @@ internal class GooglePhotoTager
         }
     }
 
-    private Task<GoogleMeta> GetMetaData(string file)
+    private async Task<GoogleMeta> GetMetaData(string file)
     {
-        return GetMetaData<GoogleMeta>(file);
+        var gm = await GetMetaData<GoogleMeta>(file);
+        gm.FilePath = file;
+        return gm;
     }
 
     private async Task<T> GetMetaData<T>(string file)
@@ -280,24 +284,45 @@ internal class GooglePhotoTager
     private void ProcessImage(FileInfo sourceFile, GoogleMeta meta)
     {
         var destinationFilePath = Path.Join(_options.Destination, sourceFile.Name);
+        var imageArchiveFilePath = Path.Join(_options.ArchiveDirectory, "Images", sourceFile.Name);
+        var metaArchiveFilePath = Path.Join(_options.ArchiveDirectory, "Metadata", $"{sourceFile.Name}.json");
 
         if (File.Exists(destinationFilePath))
         {
             if (!_options.OverWriteDestination)
             {
-                Log.Warning($"{destinationFilePath} already exists, ignoreing");
+                Log.Warning($"{destinationFilePath} already exists, ignoring");
                 return;
             }
         }
 
-        // Set the DateTaken using ExifLib
-        var img = ImageFile.FromFile(sourceFile.FullName);
-        img.Properties.Set(ExifTag.DateTimeDigitized, GetPropertyDateTaken(meta, sourceFile.FullName));
-        img.Properties.Set(ExifTag.GPSDestLongitude, meta.GeoDataExif.Longitude);
-        img.Properties.Set(ExifTag.GPSDestLatitude, meta.GeoDataExif.Latitude);
-        img.Save(destinationFilePath);
+        try
+        {
+            // Set the DateTaken using ExifLib
+            var img = ImageFile.FromFile(sourceFile.FullName);
+            img.Properties.Set(ExifTag.DateTimeDigitized, GetPropertyDateTaken(meta, sourceFile.FullName));
+            img.Properties.Set(ExifTag.GPSDestLongitude, meta.GeoDataExif.Longitude);
+            img.Properties.Set(ExifTag.GPSDestLatitude, meta.GeoDataExif.Latitude);
+            img.Save(destinationFilePath);
 
+            // Archive file
+            File.Move(sourceFile.FullName, imageArchiveFilePath);
+            File.Move(meta.FilePath, metaArchiveFilePath);
+        }
+        catch(Exception ex)
+        {
+            Log.Error(ex, $"Unable to process {sourceFile.FullName}");
+        }
+    }
 
+    private void ProcessVideo(FileInfo sourceFile, GoogleMeta meta)
+    {
+        var videoArchiveFilePath = Path.Join(_options.ArchiveDirectory, "Videos", sourceFile.Name);
+        var metaArchiveFilePath = Path.Join(_options.ArchiveDirectory, "Metadata", $"{sourceFile.Name}.json");
+
+        // Archive file
+        File.Move(sourceFile.FullName, videoArchiveFilePath);
+        File.Move(meta.FilePath, metaArchiveFilePath);
     }
 #pragma warning restore CA1416 // Validate platform compatibility
 
