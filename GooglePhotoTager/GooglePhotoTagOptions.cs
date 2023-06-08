@@ -3,6 +3,12 @@
 internal class GooglePhotoTagOptions
 {
     /// <summary>
+    /// set with -config <PATH>
+    /// Specify a config file to load
+    /// </summary>
+    public string? ConfigFile { get; init; } = null!;
+
+    /// <summary>
     /// set with -source <PATH>
     /// The source of the media and meta files
     /// </summary>
@@ -31,6 +37,16 @@ internal class GooglePhotoTagOptions
     /// Specify what to do if the destination file exists (overwrite or ignore)
     /// </summary>
     public bool OverWriteDestination { get; init; }
+
+    /// <summary>
+    /// Specify weather to move the original media file
+    /// </summary>
+    public bool ArchiveMedia { get; init; }
+
+    /// <summary>
+    /// Specify weather to move the original meta file
+    /// </summary>
+    public bool ArchiveMeta { get; init; }
 }
 
 

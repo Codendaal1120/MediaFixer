@@ -2,7 +2,7 @@
   "profiles": {
     "GooglePhotoTag": {
       "commandName": "Project",
-      "commandLineArgs": "-source \"D:\\Temp\\Google photo\\2021\\TEST\\Source2\" -destination \"D:\\Temp\\Google photo\\2021\\TEST\\Dest\\Moved\"  -archive \"D:\\Temp\\Google photo\\2021\\TEST\\Dest\\Archive\""
+      "commandLineArgs": "-config config.json"
 
     }
   }

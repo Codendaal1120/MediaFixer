@@ -1,14 +1,7 @@
 ﻿using ExifLibrary;
 using Serilog;
-using System;
-using System.Drawing;
-using System.Drawing.Imaging;
-using System.IO;
-using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using static System.Net.Mime.MediaTypeNames;
-using Image = System.Drawing.Image;
 
 namespace MediaFixer;
 
@@ -65,20 +58,28 @@ internal class GooglePhotoTager
                 Log.Error($"Property {prop} is not being used");                
             }
         }
-
+        Log.Information($"{count} files checked");
         Log.Information("======================= Tagging completed =======================");
     }
 
     private GooglePhotoTagOptions CreateOptions(Dictionary<string, string?> arguments)
     {      
-        return new GooglePhotoTagOptions()
+        var config = new GooglePhotoTagOptions()
         {
+            ConfigFile = GetConfigValue("config", arguments),
             Source = GetConfigValue("source", arguments),
             Destination = GetConfigValue("destination", arguments),
             ScanMetaOnly = HasConfigValue("scanMeta", arguments),
             OverWriteDestination = HasConfigValue("overWriteDestination", arguments),
             ArchiveDirectory = GetConfigValue("archive", arguments)
         };
+
+        if (config.ConfigFile != null && File.Exists(config.ConfigFile))
+        {
+            config = ReadFileData<GooglePhotoTagOptions>(config.ConfigFile).ConfigureAwait(false).GetAwaiter().GetResult();
+        }
+
+        return config;
     }
 
     private string GetConfigValue(string key, Dictionary<string, string?> arguments)
@@ -156,12 +157,12 @@ internal class GooglePhotoTager
     {
         var meta = await GetMetaData(metaFile.FullName);
 
-        if (_imageExtensions.Contains(file.Extension))
+        if (_imageExtensions.Contains(file.Extension.ToLower()))
         {
             ProcessImage(file, meta);
         }
 
-        if (_videoExtensions.Contains(file.Extension))
+        if (_videoExtensions.Contains(file.Extension.ToLower()))
         {
             ProcessVideo(file, meta);
         }
@@ -202,12 +203,12 @@ internal class GooglePhotoTager
 
     private async Task<GoogleMeta> GetMetaData(string file)
     {
-        var gm = await GetMetaData<GoogleMeta>(file);
+        var gm = await ReadFileData<GoogleMeta>(file);
         gm.FilePath = file;
         return gm;
     }
 
-    private async Task<T> GetMetaData<T>(string file)
+    private async Task<T> ReadFileData<T>(string file)
     {
         var options = new JsonSerializerOptions
         {
@@ -221,7 +222,7 @@ internal class GooglePhotoTager
 
     private Task<JsonObject> GetMetaDataObject(string file)
     {
-        return GetMetaData<JsonObject>(file);
+        return ReadFileData<JsonObject>(file);
     }
 
     private string GetPropertyValue(string key, dynamic json)
@@ -306,8 +307,9 @@ internal class GooglePhotoTager
             img.Save(destinationFilePath);
 
             // Archive file
-            File.Move(sourceFile.FullName, imageArchiveFilePath);
-            File.Move(meta.FilePath, metaArchiveFilePath);
+            if (_options.ArchiveMedia) { File.Move(sourceFile.FullName, imageArchiveFilePath); }
+            if (_options.ArchiveMeta) { File.Move(meta.FilePath, metaArchiveFilePath); }
+            
         }
         catch(Exception ex)
         {
@@ -317,6 +319,11 @@ internal class GooglePhotoTager
 
     private void ProcessVideo(FileInfo sourceFile, GoogleMeta meta)
     {
+        if (!_options.ArchiveMedia)
+        {
+            return;
+        }
+
         var videoArchiveFilePath = Path.Join(_options.ArchiveDirectory, "Videos", sourceFile.Name);
         var metaArchiveFilePath = Path.Join(_options.ArchiveDirectory, "Metadata", $"{sourceFile.Name}.json");
 

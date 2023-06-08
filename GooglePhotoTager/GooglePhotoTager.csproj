@@ -16,4 +16,10 @@
     <PackageReference Include="TagLibSharp" Version="2.3.0" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Update="config.json">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
 </Project>
