@@ -1,10 +1,27 @@
-﻿namespace MediaFixer.Model;
+﻿using Serilog;
+
+namespace MediaFixer.Model;
 
 internal class RunMetrics
 {
     public int FilesChecked { get; set; }
-    public int ImagesProcessed { get; set; }
-    public int VideosProcessed { get; set; }
+    public int ImagesTagged { get; set; }
+    public int ImagesConverted { get; set; }
+    public int ImagesMoved { get; set; }
+    public int VideosMoved { get; set; }
     public int FilesSkipped { get; set; }
     public int Errors { get; set; }
+
+    public void Print()
+    {
+        Log.Information($"----> {FilesChecked} files checked");
+        Log.Information($"----> {FilesSkipped} files skipped");
+        Log.Information($"----> {Errors} errors");
+        Log.Information($"----> ** Images **");
+        Log.Information($"----> {ImagesTagged} images tagged");
+        Log.Information($"----> {ImagesConverted} images converted");
+        Log.Information($"----> {ImagesMoved} images moved");
+        Log.Information($"----> ** Videos **");
+        Log.Information($"----> {VideosMoved} videos moved");
+    }
 }

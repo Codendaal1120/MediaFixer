@@ -7,6 +7,7 @@ namespace MediaFixer.Processors;
 /// </summary>
 internal class VideoProcessor : MediaProcessor
 {
+    public override MediaType MediaType => MediaType.Video;
     public override IReadOnlyCollection<string> Extensions => new[] { ".mp4", ".m4v" };
 
     public VideoProcessor(Options options) : base(options)

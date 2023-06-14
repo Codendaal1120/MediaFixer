@@ -2,7 +2,7 @@
   "profiles": {
     "GooglePhotoTag": {
       "commandName": "Project",
-      "commandLineArgs": "-config \"E:\\Development\\Projects\\GooglePhotoTag\\GooglePhotoTager\\bin\\Debug\\net6.0\\config.json\""
+      "commandLineArgs": ""
     }
   }
 }

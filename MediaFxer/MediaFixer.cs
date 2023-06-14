@@ -1,9 +1,8 @@
 ﻿using Serilog;
-using System.Diagnostics;
-using System.Drawing.Imaging;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using MediaFixer.Model;
+using MediaFixer.Processors;
 
 namespace MediaFixer;
 
@@ -27,7 +26,7 @@ internal class MediaFixer
 
         _options = CreateOptions(arguments);
 
-       // _imageProcessor = new ImageProcessor(_options);
+        SetUpDirectories();
 
         _processors = new MediaProcessor[] { 
             new ImageProcessor(_options), 
@@ -67,11 +66,9 @@ internal class MediaFixer
                 Log.Warning($"Property {prop} is not being used");
             }
         }
-        Log.Information($"----> {_metrics.FilesChecked} files checked");
-        Log.Information($"----> {_metrics.ImagesProcessed} images processed");
-        Log.Information($"----> {_metrics.VideosProcessed} videos processed");
-        Log.Information($"----> {_metrics.FilesSkipped} files skipped");
-        Log.Information($"----> {_metrics.Errors} errors");
+
+        _metrics.Print();
+        
         Log.Information("======================= Tagging completed =======================");
     }
 
@@ -85,10 +82,20 @@ internal class MediaFixer
             ConfigFile = GetConfigValue("config", arguments),
             Source = GetConfigValue("source", arguments),
             Destination = GetConfigValue("destination", arguments),
+            TempDirectory = GetConfigValue("temp", arguments),
             ScanMetaOnly = HasConfigValue("scanMeta", arguments),
-            OverWriteDestination = HasConfigValue("overWriteDestination", arguments),
+            OverWriteDestination = HasConfigValue("overWriteDestination", arguments),            
             ArchiveDirectory = GetConfigValue("archive", arguments)
         };
+
+        if (!args.Any())
+        {
+            // try to load config from local file
+            config = new Options()
+            {
+                ConfigFile = "config.json"
+            };
+        }
 
         if (config.ConfigFile != null && File.Exists(config.ConfigFile))
         {
@@ -96,14 +103,42 @@ internal class MediaFixer
             config = ReadFileData<Options>(config.ConfigFile).ConfigureAwait(false).GetAwaiter().GetResult();
         }
 
-        Log.Information($"Config:");
-        Log.Information($"\tSource: {config.Source}");
-        Log.Information($"\tDestination: {config.Destination}");
-        Log.Information($"\tArchiveDirectory: {config.ArchiveDirectory}");
-        Log.Information($"\tScanMetaOnly: {config.ScanMetaOnly}");
-        Log.Information($"\tOverWriteDestination: {config.OverWriteDestination}");
+        config.Print();
 
         return config;
+    }
+
+    private void SetUpDirectories()
+    {
+        if (!Directory.Exists(_options.ArchiveDirectory))
+        {
+            Directory.CreateDirectory(_options.ArchiveDirectory);   
+        }
+
+        if (!Directory.Exists($"{_options.ArchiveDirectory}\\Videos"))
+        {
+            Directory.CreateDirectory($"{_options.ArchiveDirectory}\\Videos");
+        }
+
+        if (!Directory.Exists($"{_options.ArchiveDirectory}\\Metadata"))
+        {
+            Directory.CreateDirectory($"{_options.ArchiveDirectory}\\Metadata");
+        }
+
+        if (!Directory.Exists($"{_options.ArchiveDirectory}\\Images"))
+        {
+            Directory.CreateDirectory($"{_options.ArchiveDirectory}\\Images");
+        }
+
+        if (!Directory.Exists(_options.TempDirectory))
+        {
+            Directory.CreateDirectory(_options.TempDirectory);
+        }
+
+        if (!Directory.Exists(_options.Destination))
+        {
+            Directory.CreateDirectory(_options.Destination);
+        }
     }
 
     private string GetConfigValue(string key, Dictionary<string, string?> arguments)
@@ -185,7 +220,13 @@ internal class MediaFixer
         {
             if (p.Extensions.Contains(file.Extension.ToLower()))
             {
-                p.Process(file, meta);
+                var result = p.Process(file, meta);
+                _metrics.ImagesTagged += p.MediaType == MediaType.Image ? result.tagged : 0;
+                _metrics.ImagesMoved += p.MediaType == MediaType.Image ? result.moved : 0;
+                _metrics.ImagesConverted += p.MediaType == MediaType.Image ? result.convered : 0;
+                _metrics.VideosMoved += p.MediaType == MediaType.Video ? result.moved : 0;
+                _metrics.FilesSkipped += result.skipped;
+                _metrics.Errors += result.errors;
                 break;
             }
         }
@@ -255,11 +296,6 @@ internal class MediaFixer
         return ReadFileData<JsonObject>(file);
     }
 
-    private string GetPropertyValue(string key, dynamic json)
-    {
-        return json.GetType().GetProperty(key).GetValue(json, null).ToString();
-    }
-
     private bool HasConfigValue(string key, Dictionary<string, string?> arguments)
     {
         return arguments.ContainsKey(key.ToLower());
@@ -279,12 +315,4 @@ internal class MediaFixer
             ? GetMetaAndScanIt(metaFile, file.Name)
             : GetMetaAndProcessMedia(file, metaFile);
     }
-
-    private void ProcessVideo(FileInfo sourceFile, GoogleMeta? meta)
-    {
-       
-    }
-
-
-
 }

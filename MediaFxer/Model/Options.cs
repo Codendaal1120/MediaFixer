@@ -1,4 +1,6 @@
-﻿namespace MediaFixer.Model;
+﻿using Serilog;
+
+namespace MediaFixer.Model;
 
 internal class Options
 {
@@ -27,6 +29,12 @@ internal class Options
     public string ArchiveDirectory { get; init; } = null!;
 
     /// <summary>
+    /// set with -temp <PATH>
+    /// The destination to move finished files to
+    /// </summary>
+    public string TempDirectory { get; init; } = null!;
+
+    /// <summary>
     /// set with -scanMeta 
     /// Enable this to check 
     /// </summary>
@@ -47,6 +55,17 @@ internal class Options
     /// Specify weather to move the original meta file
     /// </summary>
     public bool ArchiveMeta { get; init; }
+
+    internal void Print()
+    {
+        Log.Information($"Config:");
+        Log.Information($"\tSource: {Source}");
+        Log.Information($"\tDestination: {Destination}");
+        Log.Information($"\tArchiveDirectory: {ArchiveDirectory}");
+        Log.Information($"\tTempDirectory: {TempDirectory}");
+        Log.Information($"\tScanMetaOnly: {ScanMetaOnly}");
+        Log.Information($"\tOverWriteDestination: {OverWriteDestination}");
+    }
 }
 
 

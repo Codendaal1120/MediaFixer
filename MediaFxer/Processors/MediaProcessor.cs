@@ -9,6 +9,7 @@ namespace MediaFixer.Processors;
 internal abstract class MediaProcessor
 {
     public abstract IReadOnlyCollection<string> Extensions { get; }
+    public abstract MediaType MediaType { get; }
 
     /// <summary>
     /// 1. Check destination of already exists
