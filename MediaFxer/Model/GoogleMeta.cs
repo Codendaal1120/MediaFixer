@@ -1,8 +1,8 @@
-﻿namespace MediaFixer;
+﻿namespace MediaFixer.Model;
 
 internal class GoogleMeta
 {
-    public string FilePath { get; set; } = null!;    
+    public string FilePath { get; set; } = null!;
     public string Description { get; init; } = null!;
     public string ImageViews { get; init; } = null!;
     public string Title { get; init; } = null!;
@@ -14,5 +14,5 @@ internal class GoogleMeta
     public GoogleMetaPhotosOrigin GooglePhotosOrigin { get; init; } = null!;
     public GoogleMetaCreationTime PhotoTakenTime { get; init; } = null!;
 
-    public IReadOnlyCollection<GoogleMetaPerson> People { get; init; } = null!;        
+    public IReadOnlyCollection<GoogleMetaPerson> People { get; init; } = null!;
 }

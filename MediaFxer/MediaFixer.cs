@@ -1,7 +1,9 @@
-﻿using ExifLibrary;
-using Serilog;
+﻿using Serilog;
+using System.Diagnostics;
+using System.Drawing.Imaging;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using MediaFixer.Model;
 
 namespace MediaFixer;
 
@@ -9,62 +11,76 @@ namespace MediaFixer;
 /// This program is intended to tag my downloaded files from GooglePhotos Takeout.
 /// For some reason google takeout does not store the tags in the file, but I want to keep the info.
 /// </summary>
-internal class GooglePhotoTager
+internal class MediaFixer
 {
-    private readonly IReadOnlyCollection<string> _imageExtensions = new[] { ".jpg", ".png" };
-    private readonly GooglePhotoTagOptions _options;
+    
+    private readonly Options _options;
     private readonly List<string> _unusedProperties = new List<string>();
-    private readonly IReadOnlyCollection<string> _videoExtensions = new[] { ".mp4" };
+    private readonly RunMetrics _metrics = new RunMetrics();
+    private readonly IReadOnlyCollection<MediaProcessor> _processors;
 
-    private GooglePhotoTager(Dictionary<string, string?> arguments)
+    private MediaFixer(Dictionary<string, string?> arguments)
     {
-        _options = CreateOptions(arguments);
         Log.Logger = new LoggerConfiguration()
             .WriteTo.ColoredConsole()
             .CreateLogger();
+
+        _options = CreateOptions(arguments);
+
+       // _imageProcessor = new ImageProcessor(_options);
+
+        _processors = new MediaProcessor[] { 
+            new ImageProcessor(_options), 
+            new VideoProcessor(_options) };
     }
 
     internal static async Task FixMedia(Dictionary<string, string?> arguments)
     {
         if (arguments == null) throw new ArgumentNullException(nameof(arguments));
-       
-        var fixer = new GooglePhotoTager(arguments);
+
+        var fixer = new MediaFixer(arguments);
         await fixer.Start();
-    } 
+    }
 
     private async Task Start()
     {
         Log.Information("======================= Starting tagging =======================");
         var files = GetFilesInDirectory(_options.Source);
 
-        var count = 0;
         var limit = 1000;
 
         foreach (var f in files.media)
         {
-            if (count >= limit)
+            if (_metrics.FilesChecked >= limit)
             {
                 Log.Error($"Limit of {limit} files reached");
                 break;
             }
             await ProcessFile(f, files.all, _options.ScanMetaOnly);
-            count++;
+            _metrics.FilesChecked++;
         }
 
         if (_options.ScanMetaOnly)
         {
             foreach (var prop in _unusedProperties)
-            {                
-                Log.Error($"Property {prop} is not being used");                
+            {
+                Log.Warning($"Property {prop} is not being used");
             }
         }
-        Log.Information($"{count} files checked");
+        Log.Information($"----> {_metrics.FilesChecked} files checked");
+        Log.Information($"----> {_metrics.ImagesProcessed} images processed");
+        Log.Information($"----> {_metrics.VideosProcessed} videos processed");
+        Log.Information($"----> {_metrics.FilesSkipped} files skipped");
+        Log.Information($"----> {_metrics.Errors} errors");
         Log.Information("======================= Tagging completed =======================");
     }
 
-    private GooglePhotoTagOptions CreateOptions(Dictionary<string, string?> arguments)
-    {      
-        var config = new GooglePhotoTagOptions()
+    private Options CreateOptions(Dictionary<string, string?> arguments)
+    {
+        var args = string.Join(" ", arguments.Values);
+        Log.Information($"Parsing arguments {args}");
+
+        var config = new Options()
         {
             ConfigFile = GetConfigValue("config", arguments),
             Source = GetConfigValue("source", arguments),
@@ -76,8 +92,16 @@ internal class GooglePhotoTager
 
         if (config.ConfigFile != null && File.Exists(config.ConfigFile))
         {
-            config = ReadFileData<GooglePhotoTagOptions>(config.ConfigFile).ConfigureAwait(false).GetAwaiter().GetResult();
+            Log.Information($"Using config file at {config.ConfigFile}");
+            config = ReadFileData<Options>(config.ConfigFile).ConfigureAwait(false).GetAwaiter().GetResult();
         }
+
+        Log.Information($"Config:");
+        Log.Information($"\tSource: {config.Source}");
+        Log.Information($"\tDestination: {config.Destination}");
+        Log.Information($"\tArchiveDirectory: {config.ArchiveDirectory}");
+        Log.Information($"\tScanMetaOnly: {config.ScanMetaOnly}");
+        Log.Information($"\tOverWriteDestination: {config.OverWriteDestination}");
 
         return config;
     }
@@ -103,7 +127,7 @@ internal class GooglePhotoTager
         Log.Information($"Scanning directory {directory}");
 
         var allFiles = dir.GetFiles().ToList();
-        var extensions = _videoExtensions.Select(x => $"*{x}").Concat(_imageExtensions.Select(y => $"*{y}"));
+        var extensions = _processors.SelectMany(p => p.Extensions.Select(e => $"*{e}"));
         var mediaFiles = extensions.SelectMany(ext => dir.GetFiles(ext).Select(x => x)).ToList();
 
         foreach (var subDir in dir.GetDirectories())
@@ -153,18 +177,17 @@ internal class GooglePhotoTager
         return props;
     }
 
-    private async Task GetMetaAndProcessImage(FileInfo file, FileInfo metaFile)
+    private async Task GetMetaAndProcessMedia(FileInfo file, FileInfo? metaFile)
     {
-        var meta = await GetMetaData(metaFile.FullName);
+        var meta = metaFile == null ? null : await GetMetaData(metaFile.FullName);
 
-        if (_imageExtensions.Contains(file.Extension.ToLower()))
+        foreach (var p in _processors)
         {
-            ProcessImage(file, meta);
-        }
-
-        if (_videoExtensions.Contains(file.Extension.ToLower()))
-        {
-            ProcessVideo(file, meta);
+            if (p.Extensions.Contains(file.Extension.ToLower()))
+            {
+                p.Process(file, meta);
+                break;
+            }
         }
     }
 
@@ -173,8 +196,15 @@ internal class GooglePhotoTager
     /// but don't want to check each file to get all the properties.
     /// With this function I can compare my model to the files to see if I am missing anything
     /// </summary>
-    private async Task GetMetaAndScanIt(FileInfo metaFile)
+    private async Task GetMetaAndScanIt(FileInfo? metaFile, string mediaFile)
     {
+        if (metaFile == null)
+        {
+            _metrics.FilesSkipped++;
+            Log.Error($"Could not find meta data for file {mediaFile}");
+            return;
+        }
+
         var dMeta = await GetMetaDataObject(metaFile.FullName);
         var dynamicProps = GetJsonObjectProperties(dMeta);
 
@@ -244,94 +274,16 @@ internal class GooglePhotoTager
         Log.Information($"Processing {file.Name}{scanMetaOnlyLog}");
 
         var metaFile = allFiles.FirstOrDefault(x => x.Name == $"{file.Name}.json");
-        if (metaFile == null)
-        {
-            Log.Error($"Could not find meta data for file {file.Name}");
-            return Task.CompletedTask;
-        }
 
         return scanMetaOnly
-            ? GetMetaAndScanIt(metaFile)
-            : GetMetaAndProcessImage(file, metaFile);
+            ? GetMetaAndScanIt(metaFile, file.Name)
+            : GetMetaAndProcessMedia(file, metaFile);
     }
 
-    private DateTime GetPropertyDateTaken(GoogleMeta meta, string file)
+    private void ProcessVideo(FileInfo sourceFile, GoogleMeta? meta)
     {
-        var epoch = new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc);
-
-        if (meta.PhotoTakenTime.Timestamp != null)
-        {
-            var unixtime = Convert.ToInt64(meta.PhotoTakenTime.Timestamp);
-            return epoch.AddSeconds(unixtime);
-        }
-
-        if (meta.CreationTime.Timestamp != null)
-        {
-            var unixtime = Convert.ToInt64(meta.CreationTime.Timestamp);
-
-            return epoch.AddSeconds(unixtime);
-        }
-
-        Log.Error($"Could not determine date taken for {file}");
-        return epoch;
+       
     }
-
-#pragma warning disable CA1416 // Validate platform compatibility
-    /// <summary>
-    /// 1. Check destination of already exists
-    /// 2. Create a copy (we will edit the copy)
-    /// 3. Edit tags
-    /// </summary>
-    private void ProcessImage(FileInfo sourceFile, GoogleMeta meta)
-    {
-        var destinationFilePath = Path.Join(_options.Destination, sourceFile.Name);
-        var imageArchiveFilePath = Path.Join(_options.ArchiveDirectory, "Images", sourceFile.Name);
-        var metaArchiveFilePath = Path.Join(_options.ArchiveDirectory, "Metadata", $"{sourceFile.Name}.json");
-
-        if (File.Exists(destinationFilePath))
-        {
-            if (!_options.OverWriteDestination)
-            {
-                Log.Warning($"{destinationFilePath} already exists, ignoring");
-                return;
-            }
-        }
-
-        try
-        {
-            // Set the DateTaken using ExifLib
-            var img = ImageFile.FromFile(sourceFile.FullName);
-            img.Properties.Set(ExifTag.DateTimeDigitized, GetPropertyDateTaken(meta, sourceFile.FullName));
-            img.Properties.Set(ExifTag.GPSDestLongitude, meta.GeoDataExif.Longitude);
-            img.Properties.Set(ExifTag.GPSDestLatitude, meta.GeoDataExif.Latitude);
-            img.Save(destinationFilePath);
-
-            // Archive file
-            if (_options.ArchiveMedia) { File.Move(sourceFile.FullName, imageArchiveFilePath); }
-            if (_options.ArchiveMeta) { File.Move(meta.FilePath, metaArchiveFilePath); }
-            
-        }
-        catch(Exception ex)
-        {
-            Log.Error(ex, $"Unable to process {sourceFile.FullName}");
-        }
-    }
-
-    private void ProcessVideo(FileInfo sourceFile, GoogleMeta meta)
-    {
-        if (!_options.ArchiveMedia)
-        {
-            return;
-        }
-
-        var videoArchiveFilePath = Path.Join(_options.ArchiveDirectory, "Videos", sourceFile.Name);
-        var metaArchiveFilePath = Path.Join(_options.ArchiveDirectory, "Metadata", $"{sourceFile.Name}.json");
-
-        // Archive file
-        File.Move(sourceFile.FullName, videoArchiveFilePath);
-        File.Move(meta.FilePath, metaArchiveFilePath);
-    }
-#pragma warning restore CA1416 // Validate platform compatibility
 
 
 

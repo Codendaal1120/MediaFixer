@@ -1,9 +1,0 @@
-{
-  "profiles": {
-    "GooglePhotoTag": {
-      "commandName": "Project",
-      "commandLineArgs": "-config config.json"
-
-    }
-  }
-}

@@ -1,6 +1,6 @@
-﻿namespace MediaFixer;
+﻿namespace MediaFixer.Model;
 
-internal class GooglePhotoTagOptions
+internal class Options
 {
     /// <summary>
     /// set with -config <PATH>
@@ -12,7 +12,7 @@ internal class GooglePhotoTagOptions
     /// set with -source <PATH>
     /// The source of the media and meta files
     /// </summary>
-    public string Source {  get; init; } = null!;
+    public string Source { get; init; } = null!;
 
     /// <summary>
     /// set with -destination <PATH>

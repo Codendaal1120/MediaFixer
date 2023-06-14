@@ -1,4 +1,4 @@
-﻿namespace MediaFixer;
+﻿namespace MediaFixer.Model;
 
 internal class GoogleMetaPhotosOrigin
 {

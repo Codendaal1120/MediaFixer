@@ -1,10 +1,10 @@
-﻿namespace MediaFixer;
+﻿namespace GooglePhotoTager;
 
 internal static class App
 {
     private static async Task Main(string[] args)
     {
-        await GooglePhotoTager.FixMedia(ParseArguments(args));
+        await MediaFixer.MediaFixer.FixMedia(ParseArguments(args));
         Console.ReadLine();
     }
 

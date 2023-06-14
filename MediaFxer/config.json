@@ -1,0 +1,9 @@
+{
+  "source": "D:\\Temp\\Google photo\\2022\\Google Export",
+  "destination": "D:\\Temp\\Google photo\\2022\\ToUpload",
+  "archiveDirectory": "D:\\Temp\\Google photo\\2022\\Archive",
+  "scanMetaOnly": false,
+  "overWriteDestination": false,
+  "archiveMedia": true,
+  "ArchiveMeta": true
+}

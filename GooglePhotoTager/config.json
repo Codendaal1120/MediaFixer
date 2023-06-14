@@ -1,9 +1,0 @@
-{
-  "source": "d:\\temp\\google photo\\2021\\p\\source",
-  "destination": "d:\\temp\\google photo\\2021\\p\\moved",
-  "archiveDirectory": "d:\\temp\\google photo\\2021\\process\\archive",
-  "scanMetaOnly": false,
-  "overWriteDestination": false,
-  "archiveMedia": true,
-  "ArchiveMeta": true
-}
