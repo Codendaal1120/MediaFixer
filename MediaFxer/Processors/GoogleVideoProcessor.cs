@@ -1,8 +1,5 @@
 ﻿using MediaFixer.Model;
 using Serilog;
-using System.Drawing.Imaging;
-using System.Text.Json;
-using System.Diagnostics;
 
 namespace MediaFixer.Processors;
 

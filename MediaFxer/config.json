@@ -1,12 +1,17 @@
 {
   "imageProcessors": [],
-  "videoProcessors": [],
-  "source": "D:\\Temp\\Google photo\\2017\\Fix\\Media",
-  "destination": "D:\\Temp\\Google photo\\2017\\Fix\\Done",
-  "archiveDirectory": "D:\\Temp\\Google photo\\2017\\Fix\\Archive",
-  "tempDirectory": "D:\\Temp\\Google photo\\2017\\Fix\\Temp",
+  "videoProcessors": [
+    {
+      "name": "Mp4VideoProcessor",
+      "extensions": [ ".avi", ".mov" ]
+    }
+  ],
+  "source": "D:\\Temp\\IcloudUpload\\Fix\\Media",
+  "destination": "D:\\Temp\\IcloudUpload\\Fix\\Done",
+  "archiveDirectory": "D:\\Temp\\IcloudUpload\\Fix\\Archive",
+  "tempDirectory": "D:\\Temp\\IcloudUpload\\Fix\\Temp",
   "overWriteDestination": false,
   "archiveMedia": true,
   "archiveMeta": true,
-  "checkAltMetaName": true
+  "carrySubFolder": true
 }

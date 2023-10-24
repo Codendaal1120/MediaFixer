@@ -9,22 +9,8 @@ namespace MediaFixer.Processors;
 
 internal abstract class GoogleProcessor : MediaProcessor
 {
-    protected GoogleProcessor(Options globalOptions, string processorName, ILogger logger) : base(globalOptions, logger)
-    {
-        var processorConfig = globalOptions.ImageProcessors.FirstOrDefault(x => x.Name.Equals(processorName));
-
-        if (processorConfig == null)
-        {
-            processorConfig = globalOptions.VideoProcessors.FirstOrDefault(x => x.Name.Equals(processorName));
-        }
-
-        if (processorConfig == null)
-        {
-            throw new ArgumentNullException(processorName);
-        }
-
-        ProcessorOptions = processorConfig;
-
+    protected GoogleProcessor(Options globalOptions, string processorName, ILogger logger) : base(globalOptions, processorName, logger)
+    {        
         if (!ProcessorOptions.Options.TryGetValue("ArchiveMeta", out var configArchive) || !bool.TryParse(configArchive, out var archive))
         {
             throw new ArgumentException($"Missing or invalid config for {nameof(ArchiveMeta)}");
@@ -61,10 +47,7 @@ internal abstract class GoogleProcessor : MediaProcessor
     /// Enable this to check 
     /// </summary>
     protected bool ScanMetaOnly { get; init; }
-
-    protected ProcessorOption ProcessorOptions { get; init; }
-    public override IReadOnlyCollection<string> Extensions { get; }
-
+    
     private readonly List<string> _unusedProperties = new List<string>();
 
     public override Task Initilize()

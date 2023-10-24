@@ -64,6 +64,11 @@ internal class Options
     public bool ArchiveMedia { get; init; }
 
     /// <summary>
+    /// Specify weather keep the last subfolder, if it is not the media folder
+    /// </summary>
+    public bool CarrySubfolder { get; init; }
+
+    /// <summary>
     /// Image processors
     /// </summary>
     public IReadOnlyCollection<ProcessorOption> ImageProcessors { get; init; } = null!;

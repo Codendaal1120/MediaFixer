@@ -28,7 +28,7 @@ internal class MediaFixer
 
         SetUpDirectories();
 
-        _processors = ProcessorFactory.GetProcessors(_options);
+        _processors = ProcessorFactory.GetProcessors(_options, Log.Logger);
     }
 
     internal static async Task FixMedia(Dictionary<string, string?> arguments)
@@ -43,7 +43,6 @@ internal class MediaFixer
     {
         Log.Information("======================= Starting fixing =======================");
         var files = GetFilesInDirectory(_options.Source);
-
         var limit = 1000;
 
         foreach (var f in files.media)

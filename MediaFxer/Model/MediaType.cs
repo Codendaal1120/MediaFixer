@@ -1,4 +1,4 @@
-﻿namespace MediaFixer.Processors;
+﻿namespace MediaFixer.Model;
 
 internal enum MediaType
 {

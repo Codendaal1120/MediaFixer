@@ -13,20 +13,12 @@ namespace MediaFixer.Processors;
 internal class GoogleImageProcessor : GoogleProcessor
 {
     public IReadOnlyCollection<string> _convertExtensions;
-    public override IReadOnlyCollection<string> Extensions { get; }
     public override MediaType MediaType => MediaType.Image;
 
     public GoogleImageProcessor(Options options, ILogger logger) : base(options, nameof(GoogleImageProcessor), logger)
     {
-        var processorConfig = options.ImageProcessors.FirstOrDefault(x => x.Name.Equals(nameof(GoogleImageProcessor)));
-        if (processorConfig == null)
-        {
-            throw new ArgumentNullException("GoogleVideoProcessorConfig");
-        }
 
-        Extensions = processorConfig.Extensions;
-
-        if (!processorConfig.Options.TryGetValue("ConvertExtensions", out var configConvertExtensions))
+        if (!ProcessorOptions.Options.TryGetValue("ConvertExtensions", out var configConvertExtensions))
         {
             throw new ArgumentException($"Missing or invalid config for ConvertExtensions");
         }
@@ -46,7 +38,7 @@ internal class GoogleImageProcessor : GoogleProcessor
         var meta = await GetMetaData(metaFile);
 
         var tempFile = Path.Join(Options.TempDirectory, sourceFile.Name);
-        var destinationFilePath = GetFileDesitnationPath(sourceFile);
+        var destinationFilePath = GetFileDesitnationPath(sourceFile, GetNewExtension(sourceFile));
         var imageArchiveFilePath = Path.Join(Options.ArchiveDirectory, "Images", sourceFile.Name);
         var metaArchiveFilePath = Path.Join(Options.ArchiveDirectory, "Metadata", $"{sourceFile.Name}.json");
 
@@ -91,14 +83,14 @@ internal class GoogleImageProcessor : GoogleProcessor
         }
     }
 
-    private string GetFileDesitnationPath(FileInfo sourceFile)
+    private string? GetNewExtension(FileInfo sourceFile)
     {
         if (!_convertExtensions.Contains(sourceFile.Extension.ToLower()))
         {
-            return Path.Join(Options.Destination, sourceFile.Name);
+            return null;            
         }
 
-        return Path.Join(Options.Destination, sourceFile.Name).Replace(sourceFile.Extension, ".jpg");
+        return ".jpg";
     }
 
     private int TagImage(GoogleMeta meta, string tempFile)
