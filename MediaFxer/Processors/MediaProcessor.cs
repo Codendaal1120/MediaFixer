@@ -57,8 +57,6 @@ internal abstract class MediaProcessor
             dest = Path.Join(Options.Destination, sourceFile.Directory.Name, sourceFile.Name);
         }
 
-        dest = Path.Join(Options.Destination, sourceFile.Name);
-
         if (!string.IsNullOrEmpty(newExtension))
         {
             dest.Replace(dest, newExtension);
