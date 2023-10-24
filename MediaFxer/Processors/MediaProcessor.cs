@@ -1,4 +1,5 @@
 ﻿using MediaFixer.Model;
+using Serilog;
 
 namespace MediaFixer.Processors;
 
@@ -7,7 +8,7 @@ internal class MediaProcessResult
     public bool Skipped { get; set; }
     public bool Error { get; set; }
     public bool Moved { get; set; }
-    public bool Tagged { get; set; }
+    public int Tagged { get; set; }
     public bool Converted { get; set; }
 }
 
@@ -20,6 +21,13 @@ internal abstract class MediaProcessor
     public abstract IReadOnlyCollection<string> Extensions { get; }
     public abstract MediaType MediaType { get; }
     public bool HasInitilized { get; protected set; }
+    public ILogger Logger { get; protected set; }
+
+    protected MediaProcessor(Options options, ILogger logger)
+    {
+        Options = options;
+        Logger = logger;
+    }
 
     /// <summary>
     /// 1. Check destination of already exists
@@ -30,12 +38,5 @@ internal abstract class MediaProcessor
 
     public abstract Task Initilize();
 
-    protected readonly Options Options;
-
-    protected MediaProcessor(Options options)
-    {
-        Options = options;
-    }
-
-    
+    protected readonly Options Options;    
 }

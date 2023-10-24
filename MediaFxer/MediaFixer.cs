@@ -104,7 +104,7 @@ internal class MediaFixer
 
         return config;
     }
-
+    
     private void SetUpDirectories()
     {
         if (!Directory.Exists(_options.ArchiveDirectory))
@@ -190,11 +190,11 @@ internal class MediaFixer
             {
                 if (!p.HasInitilized) { await p.Initilize(); }
                 var result = await p.Process(file, allFiles);
-                _metrics.ImagesTagged += p.MediaType == MediaType.Image && result.Tagged ? 1 : 0;
+                _metrics.ImagesTagged += p.MediaType == MediaType.Image ? result.Tagged : 0;
                 _metrics.ImagesMoved += p.MediaType == MediaType.Image && result.Moved ? 1 : 0;
                 _metrics.ImagesConverted += p.MediaType == MediaType.Image && result.Converted ? 1 : 0;
 
-                _metrics.VideosTagged += p.MediaType == MediaType.Video  && result.Tagged ? 1 : 0;
+                _metrics.VideosTagged += p.MediaType == MediaType.Video ? result.Tagged : 0;
                 _metrics.VideosConverted += p.MediaType == MediaType.Video  && result.Converted ? 1 : 0;
                 _metrics.VideosMoved += p.MediaType == MediaType.Video  && result.Moved ? 1 : 0;
 

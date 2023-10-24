@@ -1,152 +1,172 @@
-﻿//using ExifLibrary;
-//using Serilog;
-//using MediaFixer.Model;
-//using System.Diagnostics;
-//using ImageMagick;
-//using ExifTag = ExifLibrary.ExifTag;
+﻿using ExifLibrary;
+using Serilog;
+using MediaFixer.Model;
+using ImageMagick;
+using ExifTag = ExifLibrary.ExifTag;
 
-//namespace MediaFixer.Processors;
+namespace MediaFixer.Processors;
 
-//internal class ImageProcessor : MediaProcessor
-//{
-//    public IReadOnlyCollection<string> _convertExtensions => new[] { ".heic", ".png" };
-//    public override IReadOnlyCollection<string> Extensions => new[] { ".heic", ".jpg", ".png" };    
-//    public override MediaType MediaType => MediaType.Image;
+/// <summary>
+/// Convert extensions: ".heic", ".png"
+/// Extensions: ".heic", ".jpg", ".png"
+/// </summary>
+internal class GoogleImageProcessor : GoogleProcessor
+{
+    public IReadOnlyCollection<string> _convertExtensions;
+    public override IReadOnlyCollection<string> Extensions { get; }
+    public override MediaType MediaType => MediaType.Image;
 
-//    public ImageProcessor(Options options) : base(options)
-//    {
-//    }
+    public GoogleImageProcessor(Options options, ILogger logger) : base(options, nameof(GoogleImageProcessor), logger)
+    {
+        var processorConfig = options.ImageProcessors.FirstOrDefault(x => x.Name.Equals(nameof(GoogleImageProcessor)));
+        if (processorConfig == null)
+        {
+            throw new ArgumentNullException("GoogleVideoProcessorConfig");
+        }
 
-//    private string GetFileDesitnationPath(FileInfo sourceFile)
-//    {
-//        if (!_convertExtensions.Contains(sourceFile.Extension.ToLower()))
-//        {
-//            return Path.Join(Options.Destination, sourceFile.Name);
-//        }
+        Extensions = processorConfig.Extensions;
 
-//        return Path.Join(Options.Destination, sourceFile.Name).Replace(sourceFile.Extension, ".jpg");
-//    }
+        if (!processorConfig.Options.TryGetValue("ConvertExtensions", out var configConvertExtensions))
+        {
+            throw new ArgumentException($"Missing or invalid config for ConvertExtensions");
+        }
 
-//    public override (int skipped, int errors, int tagged, int moved, int convered) Process(FileInfo sourceFile, GoogleMeta? meta)
-//    {
-//        if (meta == null)
-//        {
-//            Log.Error($"Could not find meta data for file {sourceFile.Name}");
-//            return (1, 0, 0, 0, 0);
-//        }
+        var split = configConvertExtensions.Split(';');
+        _convertExtensions = split;
+    }
 
-//        var tempFile = Path.Join(Options.TempDirectory, sourceFile.Name);
-//        var destinationFilePath = GetFileDesitnationPath(sourceFile);
-//        var imageArchiveFilePath = Path.Join(Options.ArchiveDirectory, "Images", sourceFile.Name);
-//        var metaArchiveFilePath = Path.Join(Options.ArchiveDirectory, "Metadata", $"{sourceFile.Name}.json");
+    public override async Task<MediaProcessResult> Process(FileInfo sourceFile, IReadOnlyCollection<FileInfo> allFiles)
+    {
+        var metaFile = GetMetaFile(sourceFile, allFiles);
+        if (metaFile == null)
+        {
+            Log.Error($"Could not find meta data for file {sourceFile.Name}");
+            return new MediaProcessResult() { Error = true };
+        }
+        var meta = await GetMetaData(metaFile);
 
-//        if (File.Exists(destinationFilePath))
-//        {
-//            if (!Options.OverWriteDestination)
-//            {
-//                Log.Warning($"{destinationFilePath} already exists, ignoring");
-//                return (1, 0, 0, 0, 0);
-//            }
-//        }
+        var tempFile = Path.Join(Options.TempDirectory, sourceFile.Name);
+        var destinationFilePath = GetFileDesitnationPath(sourceFile);
+        var imageArchiveFilePath = Path.Join(Options.ArchiveDirectory, "Images", sourceFile.Name);
+        var metaArchiveFilePath = Path.Join(Options.ArchiveDirectory, "Metadata", $"{sourceFile.Name}.json");
 
-//        try
-//        {
-//            // Create temp file
-//            File.Copy(sourceFile.FullName, tempFile, true);
+        if (File.Exists(destinationFilePath))
+        {
+            if (!Options.OverWriteDestination)
+            {
+                Log.Warning($"{destinationFilePath} already exists, ignoring");
+                return new MediaProcessResult() { Skipped = true };
+            }
+        }
 
-//            // tag file
-//            var tagged = TagImage(meta, tempFile);
+        try
+        {
+            // Create temp file
+            File.Copy(sourceFile.FullName, tempFile, true);
 
-//            // convert image
-//            var converted = ConvertImage(tempFile);
+            // tag file
+            var tagged = TagImage(meta, tempFile);
 
-//            // move image
-//            File.Move(tempFile, destinationFilePath, true);
+            // convert image
+            var converted = ConvertImage(tempFile);
 
-//            // Archive file
-//            if (Options.ArchiveMedia)
-//            {
-//                File.Move(sourceFile.FullName, imageArchiveFilePath);
-//            }
+            // move image
+            File.Move(tempFile, destinationFilePath, true);
 
-//            if (Options.ArchiveMeta) { File.Move(meta.FilePath, metaArchiveFilePath); }          
+            // Archive file
+            if (Options.ArchiveMedia)
+            {
+                File.Move(sourceFile.FullName, imageArchiveFilePath);
+            }
 
-//            return (0, 0, tagged, 1, converted);
+            if (ArchiveMeta) { File.Move(meta.FilePath, metaArchiveFilePath); }
 
-//        }
-//        catch (Exception ex)
-//        {
-//            Log.Error(ex, $"Unable to process {sourceFile.FullName}");
-//            return (0, 1, 0, 0, 0);
-//        }
-//    }
+            return new MediaProcessResult() { Tagged = tagged, Converted = converted, Moved = true };
 
-//    private int TagImage(GoogleMeta meta, string tempFile)
-//    {
-//        var img = ImageFile.FromFile(tempFile);
-//        var tagged = 0;
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, $"Unable to process {sourceFile.FullName}");
+            return new MediaProcessResult() { Error = true };
+        }
+    }
 
-//        // Set the DateTaken using ExifLib
-//        if (img.Properties.Get(ExifTag.DateTimeDigitized) == null)
-//        {
-//            tagged = 1;
-//            img.Properties.Set(ExifTag.DateTimeDigitized, GetPropertyDateTaken(meta, tempFile));
-//        }
+    private string GetFileDesitnationPath(FileInfo sourceFile)
+    {
+        if (!_convertExtensions.Contains(sourceFile.Extension.ToLower()))
+        {
+            return Path.Join(Options.Destination, sourceFile.Name);
+        }
 
-//        // set GPS properties
-//        var existingLat = img.Properties.Get(ExifTag.GPSLatitude);
-//        var existingLng = img.Properties.Get(ExifTag.GPSLongitude);
+        return Path.Join(Options.Destination, sourceFile.Name).Replace(sourceFile.Extension, ".jpg");
+    }
 
-//        if (existingLat == null)
-//        {
-//            tagged = 1;
-//            img.Properties.Set(ExifTag.GPSLatitude, meta.GeoDataExif.Longitude);
-//            img.Properties.Set(ExifTag.GPSLongitude, meta.GeoDataExif.Latitude);
-//        }
+    private int TagImage(GoogleMeta meta, string tempFile)
+    {
+        var img = ImageFile.FromFile(tempFile);
+        var tagged = 0;
 
-//        img.Save(tempFile);
+        // Set the DateTaken using ExifLib
+        if (img.Properties.Get(ExifTag.DateTimeDigitized) == null)
+        {
+            tagged = 1;
+            img.Properties.Set(ExifTag.DateTimeDigitized, GetPropertyDateTaken(meta, tempFile));
+        }
 
-//        return tagged;
-//    }
+        // set GPS properties
+        var existingLat = img.Properties.Get(ExifTag.GPSLatitude);
+        var existingLng = img.Properties.Get(ExifTag.GPSLongitude);
 
-//    private int ConvertImage(string tempFile)
-//    {
-//        var fi = new FileInfo(tempFile);
+        if (existingLat == null)
+        {
+            tagged = 1;
+            img.Properties.Set(ExifTag.GPSLatitude, meta.GeoDataExif.Longitude);
+            img.Properties.Set(ExifTag.GPSLongitude, meta.GeoDataExif.Latitude);
+        }
 
-//        if (!_convertExtensions.Contains(fi.Extension.ToLower()))
-//        {
-//            return 0;
-//        }
+        img.Save(tempFile);
 
-//        // Read image from file
-//        using (var image = new MagickImage(tempFile))
-//        {
-//            // PNG files will loose Exif data
-//            var newName = tempFile.Replace(fi.Extension, ".jpg");
-//            image.Format = MagickFormat.Jpeg;
-//            image.Write(newName);
-//            return 1;
-//        }
-//    }
+        return tagged;
+    }
 
-//    private DateTime GetPropertyDateTaken(GoogleMeta meta, string file)
-//    {
-//        var epoch = new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+    private bool ConvertImage(string tempFile)
+    {
+        var fi = new FileInfo(tempFile);
 
-//        if (meta.PhotoTakenTime.Timestamp != null)
-//        {
-//            var unixtime = Convert.ToInt64(meta.PhotoTakenTime.Timestamp);
-//            return epoch.AddSeconds(unixtime);
-//        }
+        if (!_convertExtensions.Contains(fi.Extension.ToLower()))
+        {
+            return false;
+        }
 
-//        if (meta.CreationTime.Timestamp != null)
-//        {
-//            var unixtime = Convert.ToInt64(meta.CreationTime.Timestamp);
+        // Read image from file
+        using (var image = new MagickImage(tempFile))
+        {
+            // PNG files will loose Exif data
+            var newName = tempFile.Replace(fi.Extension, ".jpg");
+            image.Format = MagickFormat.Jpeg;
+            image.Write(newName);
+            return true;
+        }
+    }
 
-//            return epoch.AddSeconds(unixtime);
-//        }
+    private DateTime GetPropertyDateTaken(GoogleMeta meta, string file)
+    {
+        var epoch = new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc);
 
-//        Log.Error($"Could not determine date taken for {file}");
-//        return epoch;
-//    }
-//}
+        if (meta.PhotoTakenTime.Timestamp != null)
+        {
+            var unixtime = Convert.ToInt64(meta.PhotoTakenTime.Timestamp);
+            return epoch.AddSeconds(unixtime);
+        }
+
+        if (meta.CreationTime.Timestamp != null)
+        {
+            var unixtime = Convert.ToInt64(meta.CreationTime.Timestamp);
+
+            return epoch.AddSeconds(unixtime);
+        }
+
+        Log.Error($"Could not determine date taken for {file}");
+        return epoch;
+    }
+}
