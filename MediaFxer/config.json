@@ -1,10 +1,11 @@
 {
-  "source": "D:\\Temp\\Google photo\\2022\\Google Export\\c",
-  "destination": "D:\\Temp\\Google photo\\2022\\ToUpload",
-  "archiveDirectory": "D:\\Temp\\Google photo\\2022\\Archive",
-  "tempDirectory": "D:\\Temp\\Google photo\\2022\\Temp",
+  "source": "D:\\Temp\\Google photo\\2017\\Fix\\Media",
+  "destination": "D:\\Temp\\Google photo\\2017\\Fix\\Done",
+  "archiveDirectory": "D:\\Temp\\Google photo\\2017\\Fix\\Archive",
+  "tempDirectory": "D:\\Temp\\Google photo\\2017\\Fix\\Temp",
   "scanMetaOnly": false,
   "overWriteDestination": false,
   "archiveMedia": true,
-  "archiveMeta": true
+  "archiveMeta": true,
+  "checkAltMetaName": true
 }

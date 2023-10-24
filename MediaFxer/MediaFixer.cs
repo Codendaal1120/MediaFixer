@@ -3,6 +3,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using MediaFixer.Model;
 using MediaFixer.Processors;
+using System.Text.RegularExpressions;
 
 namespace MediaFixer;
 
@@ -11,8 +12,7 @@ namespace MediaFixer;
 /// For some reason google takeout does not store the tags in the file, but I want to keep the info.
 /// </summary>
 internal class MediaFixer
-{
-    
+{    
     private readonly Options _options;
     private readonly List<string> _unusedProperties = new List<string>();
     private readonly RunMetrics _metrics = new RunMetrics();
@@ -310,6 +310,16 @@ internal class MediaFixer
         Log.Information($"Processing {file.Name}{scanMetaOnlyLog}");
 
         var metaFile = allFiles.FirstOrDefault(x => x.Name == $"{file.Name}.json");
+        if (metaFile == null && _options.CheckAltMetaName)
+        {
+            var num = Regex.Match(file.Name, "\\((\\d+)\\)");
+            if (num.Success && num.Groups[1] != num) 
+            {
+                var altName = $"{file.Name.Replace($"({num.Groups[1]})", "")}({num.Groups[1]}).json";
+                metaFile = allFiles.FirstOrDefault(x => x.Name == altName);
+            }
+        }
+
 
         return scanMetaOnly
             ? GetMetaAndScanIt(metaFile, file.Name)

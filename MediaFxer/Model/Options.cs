@@ -56,6 +56,12 @@ internal class Options
     /// </summary>
     public bool ArchiveMeta { get; init; }
 
+    /// <summary>
+    /// If metadata for file IMG_10(1).JPG cannot be found, check IMG_10.JPG(1)
+    /// </summary>
+    public bool CheckAltMetaName { get; init; }
+    
+
     internal void Print()
     {
         Log.Information($"Config:");
