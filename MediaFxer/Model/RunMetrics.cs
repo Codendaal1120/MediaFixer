@@ -9,6 +9,8 @@ internal class RunMetrics
     public int ImagesConverted { get; set; }
     public int ImagesMoved { get; set; }
     public int VideosMoved { get; set; }
+    public int VideosConverted { get; set; }
+    public int VideosTagged { get; set; }
     public int FilesSkipped { get; set; }
     public int Errors { get; set; }
 
@@ -22,6 +24,8 @@ internal class RunMetrics
         Log.Information($"----> {ImagesConverted} images converted");
         Log.Information($"----> {ImagesMoved} images moved");
         Log.Information($"----> ** Videos **");
+        Log.Information($"----> {VideosTagged} videos tagged");
+        Log.Information($"----> {VideosConverted} videos converted");
         Log.Information($"----> {VideosMoved} videos moved");
     }
 }

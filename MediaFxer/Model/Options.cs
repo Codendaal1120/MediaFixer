@@ -2,6 +2,24 @@
 
 namespace MediaFixer.Model;
 
+internal class ProcessorOption
+{
+    /// <summary>
+    /// Name of the processor class
+    /// </summary>
+    public string Name { get; init; } = null!;
+
+    /// <summary>
+    /// Supported extensions
+    /// </summary>
+    public IReadOnlyCollection<string> Extensions { get; init; } = null!;
+
+    /// <summary>
+    /// KvP of configuration
+    /// </summary>
+    public Dictionary<string, string> Options { get; init; } = null!;
+}
+
 internal class Options
 {
     /// <summary>
@@ -35,12 +53,6 @@ internal class Options
     public string TempDirectory { get; init; } = null!;
 
     /// <summary>
-    /// set with -scanMeta 
-    /// Enable this to check 
-    /// </summary>
-    public bool ScanMetaOnly { get; init; }
-
-    /// <summary>
     /// set with -overWriteDestination
     /// Specify what to do if the destination file exists (overwrite or ignore)
     /// </summary>
@@ -52,15 +64,14 @@ internal class Options
     public bool ArchiveMedia { get; init; }
 
     /// <summary>
-    /// Specify weather to move the original meta file
+    /// Image processors
     /// </summary>
-    public bool ArchiveMeta { get; init; }
+    public IReadOnlyCollection<ProcessorOption> ImageProcessors { get; init; } = null!;
 
     /// <summary>
-    /// If metadata for file IMG_10(1).JPG cannot be found, check IMG_10.JPG(1)
+    /// Video processors
     /// </summary>
-    public bool CheckAltMetaName { get; init; }
-    
+    public IReadOnlyCollection<ProcessorOption> VideoProcessors { get; init; } = null!;
 
     internal void Print()
     {
@@ -69,7 +80,6 @@ internal class Options
         Log.Information($"\tDestination: {Destination}");
         Log.Information($"\tArchiveDirectory: {ArchiveDirectory}");
         Log.Information($"\tTempDirectory: {TempDirectory}");
-        Log.Information($"\tScanMetaOnly: {ScanMetaOnly}");
         Log.Information($"\tOverWriteDestination: {OverWriteDestination}");
     }
 }

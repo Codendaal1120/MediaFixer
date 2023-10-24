@@ -14,7 +14,7 @@ namespace MediaFixer;
 internal class MediaFixer
 {    
     private readonly Options _options;
-    private readonly List<string> _unusedProperties = new List<string>();
+  
     private readonly RunMetrics _metrics = new RunMetrics();
     private readonly IReadOnlyCollection<MediaProcessor> _processors;
 
@@ -28,9 +28,7 @@ internal class MediaFixer
 
         SetUpDirectories();
 
-        _processors = new MediaProcessor[] { 
-            new ImageProcessor(_options), 
-            new VideoProcessor(_options) };
+        _processors = ProcessorFactory.GetProcessors(_options);
     }
 
     internal static async Task FixMedia(Dictionary<string, string?> arguments)
@@ -43,7 +41,7 @@ internal class MediaFixer
 
     private async Task Start()
     {
-        Log.Information("======================= Starting tagging =======================");
+        Log.Information("======================= Starting fixing =======================");
         var files = GetFilesInDirectory(_options.Source);
 
         var limit = 1000;
@@ -55,21 +53,21 @@ internal class MediaFixer
                 Log.Error($"Limit of {limit} files reached");
                 break;
             }
-            await ProcessFile(f, files.all, _options.ScanMetaOnly);
+            await ProcessFile(f, files.all);
             _metrics.FilesChecked++;
         }
 
-        if (_options.ScanMetaOnly)
+        foreach (var p in _processors)
         {
-            foreach (var prop in _unusedProperties)
+            if (p.HasInitilized)
             {
-                Log.Warning($"Property {prop} is not being used");
+                //finalize
             }
         }
 
         _metrics.Print();
         
-        Log.Information("======================= Tagging completed =======================");
+        Log.Information("======================= Fixing completed =======================");
     }
 
     private Options CreateOptions(Dictionary<string, string?> arguments)
@@ -83,7 +81,6 @@ internal class MediaFixer
             Source = GetConfigValue("source", arguments),
             Destination = GetConfigValue("destination", arguments),
             TempDirectory = GetConfigValue("temp", arguments),
-            ScanMetaOnly = HasConfigValue("scanMeta", arguments),
             OverWriteDestination = HasConfigValue("overWriteDestination", arguments),            
             ArchiveDirectory = GetConfigValue("archive", arguments)
         };
@@ -100,7 +97,7 @@ internal class MediaFixer
         if (config.ConfigFile != null && File.Exists(config.ConfigFile))
         {
             Log.Information($"Using config file at {config.ConfigFile}");
-            config = ReadFileData<Options>(config.ConfigFile).ConfigureAwait(false).GetAwaiter().GetResult();
+            config = JsonReader.ReadFileData<Options>(config.ConfigFile).ConfigureAwait(false).GetAwaiter().GetResult();
         }
 
         config.Print();
@@ -175,154 +172,35 @@ internal class MediaFixer
         return (allFiles, mediaFiles);
     }
 
-    private IReadOnlyCollection<string> GetJsonNodeProperties(string parent, JsonNode node)
-    {
-        var props = new List<string>();
-
-        if (node is JsonObject nodeObject)
-        {
-            foreach (var kvp in nodeObject)
-            {
-                props.Add($"{parent}.{kvp.Key}");
-                props.AddRange(GetJsonNodeProperties($"{parent}.{kvp.Key}", kvp.Value!));
-            }
-        }
-
-        if (node is JsonArray array)
-        {
-            foreach (var element in array)
-            {
-                props.AddRange(GetJsonNodeProperties(parent, element!));
-            }
-        }
-
-        return props;
-    }
-
-    private IReadOnlyCollection<string> GetJsonObjectProperties(JsonObject dyn)
-    {
-        var props = new List<string>();
-
-        foreach (var kvp in dyn)
-        {
-            props.Add(kvp.Key);
-            props.AddRange(GetJsonNodeProperties(kvp.Key, kvp.Value!));
-        }
-
-        return props;
-    }
-
-    private async Task GetMetaAndProcessMedia(FileInfo file, FileInfo? metaFile)
-    {
-        var meta = metaFile == null ? null : await GetMetaData(metaFile.FullName);
-
-        foreach (var p in _processors)
-        {
-            if (p.Extensions.Contains(file.Extension.ToLower()))
-            {
-                var result = p.Process(file, meta);
-                _metrics.ImagesTagged += p.MediaType == MediaType.Image ? result.tagged : 0;
-                _metrics.ImagesMoved += p.MediaType == MediaType.Image ? result.moved : 0;
-                _metrics.ImagesConverted += p.MediaType == MediaType.Image ? result.convered : 0;
-                _metrics.VideosMoved += p.MediaType == MediaType.Video ? result.moved : 0;
-                _metrics.FilesSkipped += result.skipped;
-                _metrics.Errors += result.errors;
-                break;
-            }
-        }
-    }
-
-    /// <summary>
-    /// I want to build a model for the google json,
-    /// but don't want to check each file to get all the properties.
-    /// With this function I can compare my model to the files to see if I am missing anything
-    /// </summary>
-    private async Task GetMetaAndScanIt(FileInfo? metaFile, string mediaFile)
-    {
-        if (metaFile == null)
-        {
-            _metrics.FilesSkipped++;
-            Log.Error($"Could not find meta data for file {mediaFile}");
-            return;
-        }
-
-        var dMeta = await GetMetaDataObject(metaFile.FullName);
-        var dynamicProps = GetJsonObjectProperties(dMeta);
-
-        // if its stupid and it works, its not stupid
-        var parsedMeta = await GetMetaData(metaFile.FullName);
-        var parsedJson = JsonSerializer.Serialize(parsedMeta);
-        var parsedJsonObject = JsonSerializer.Deserialize<JsonObject>(parsedJson);
-        var parsedProps = GetJsonObjectProperties(parsedJsonObject!);
-
-        foreach (var prop in dynamicProps)
-        {
-            if (parsedProps.All(x => !string.Equals(x, prop, StringComparison.CurrentCultureIgnoreCase)))
-            {
-                if (!_unusedProperties.Contains(prop))
-                {
-                    _unusedProperties.Add(prop);
-                }
-            }
-        }
-
-        if (parsedMeta.GeoDataExif.Longitude > 0)
-        {
-            Log.Information($"{metaFile.FullName} has GPS data!");
-        }
-    }
-
-    private async Task<GoogleMeta> GetMetaData(string file)
-    {
-        var gm = await ReadFileData<GoogleMeta>(file);
-        gm.FilePath = file;
-        return gm;
-    }
-
-    private async Task<T> ReadFileData<T>(string file)
-    {
-        var options = new JsonSerializerOptions
-        {
-            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        };
-
-        using var sr = new StreamReader(file);
-        var content = await sr.ReadToEndAsync();
-        return JsonSerializer.Deserialize<T>(content, options)!;
-    }
-
-    private Task<JsonObject> GetMetaDataObject(string file)
-    {
-        return ReadFileData<JsonObject>(file);
-    }
-
     private bool HasConfigValue(string key, Dictionary<string, string?> arguments)
     {
         return arguments.ContainsKey(key.ToLower());
     }
 
     /// <summary>
-    /// Get the meta json file and set the tags on the file
+    /// Runs the file through the desired processor
     /// </summary>
-    private Task ProcessFile(FileInfo file, IReadOnlyCollection<FileInfo> allFiles, bool scanMetaOnly)
+    private async Task ProcessFile(FileInfo file, IReadOnlyCollection<FileInfo> allFiles)
     {
-        var scanMetaOnlyLog = scanMetaOnly ? " - Only scanning meta files" : string.Empty;
-        Log.Information($"Processing {file.Name}{scanMetaOnlyLog}");
+        Log.Information($"Processing {file.Name}");
 
-        var metaFile = allFiles.FirstOrDefault(x => x.Name == $"{file.Name}.json");
-        if (metaFile == null && _options.CheckAltMetaName)
+        foreach (var p in _processors)
         {
-            var num = Regex.Match(file.Name, "\\((\\d+)\\)");
-            if (num.Success && num.Groups[1] != num) 
+            if (p.Extensions.Contains(file.Extension.ToLower()))
             {
-                var altName = $"{file.Name.Replace($"({num.Groups[1]})", "")}({num.Groups[1]}).json";
-                metaFile = allFiles.FirstOrDefault(x => x.Name == altName);
+                if (!p.HasInitilized) { await p.Initilize(); }
+                var result = await p.Process(file, allFiles);
+                _metrics.ImagesTagged += p.MediaType == MediaType.Image && result.Tagged ? 1 : 0;
+                _metrics.ImagesMoved += p.MediaType == MediaType.Image && result.Moved ? 1 : 0;
+                _metrics.ImagesConverted += p.MediaType == MediaType.Image && result.Converted ? 1 : 0;
+
+                _metrics.VideosTagged += p.MediaType == MediaType.Video  && result.Tagged ? 1 : 0;
+                _metrics.VideosConverted += p.MediaType == MediaType.Video  && result.Converted ? 1 : 0;
+                _metrics.VideosMoved += p.MediaType == MediaType.Video  && result.Moved ? 1 : 0;
+
+                _metrics.FilesSkipped += result.Skipped ? 1 : 0;
+                _metrics.Errors += result.Error ? 1 : 0;
             }
         }
-
-
-        return scanMetaOnly
-            ? GetMetaAndScanIt(metaFile, file.Name)
-            : GetMetaAndProcessMedia(file, metaFile);
     }
 }

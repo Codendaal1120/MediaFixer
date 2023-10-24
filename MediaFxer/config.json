@@ -1,9 +1,10 @@
 {
+  "imageProcessors": [],
+  "videoProcessors": [],
   "source": "D:\\Temp\\Google photo\\2017\\Fix\\Media",
   "destination": "D:\\Temp\\Google photo\\2017\\Fix\\Done",
   "archiveDirectory": "D:\\Temp\\Google photo\\2017\\Fix\\Archive",
   "tempDirectory": "D:\\Temp\\Google photo\\2017\\Fix\\Temp",
-  "scanMetaOnly": false,
   "overWriteDestination": false,
   "archiveMedia": true,
   "archiveMeta": true,
